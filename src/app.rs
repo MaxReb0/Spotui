@@ -1,4 +1,10 @@
-use ratatui::{DefaultTerminal, Frame, buffer::Buffer, layout::Rect, widgets::Widget};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use ratatui::{
+    DefaultTerminal, Frame,
+    buffer::Buffer,
+    layout::Rect,
+    widgets::{Block, Paragraph, Widget},
+};
 
 #[derive(Debug, Default)]
 pub struct App {
@@ -15,14 +21,36 @@ impl App {
     }
 
     fn draw(&self, frame: &mut Frame) {
-        todo!();
+        frame.render_widget(self, frame.area());
+    }
+
+    fn exit(&mut self) {
+        self.exit = true;
     }
 
     fn handle_events(&mut self) -> std::io::Result<()> {
-        todo!();
+        match event::read()? {
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                self.handle_key_event(key_event)
+            }
+            _ => {}
+        };
+        Ok(())
+    }
+
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('q') => self.exit(),
+            _ => {}
+        };
     }
 }
 
 impl Widget for &App {
-    fn render(self, area: Rect, buf: &mut Buffer) {}
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        Paragraph::new("Testing here!")
+            .centered()
+            .block(Block::bordered().title(" use <q> to quit the program "))
+            .render(area, buf);
+    }
 }
