@@ -1,4 +1,4 @@
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -41,6 +41,9 @@ impl App {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         match key_event.code {
             KeyCode::Char('q') => self.exit(),
+            KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.exit()
+            }
             _ => {}
         };
     }
@@ -50,7 +53,7 @@ impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
         Paragraph::new("Testing here!")
             .centered()
-            .block(Block::bordered().title(" use <q> to quit the program "))
+            .block(Block::bordered().title(" use <q> or <Ctrl + c> to quit the program "))
             .render(area, buf);
     }
 }
