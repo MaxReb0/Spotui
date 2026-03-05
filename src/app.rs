@@ -29,6 +29,8 @@ impl App {
     }
 
     fn handle_events(&mut self) -> std::io::Result<()> {
+        // TODO: This is a blocking call, so eventually in later steps it would be smarter
+        // to just poll for a user input.
         match event::read()? {
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
                 self.handle_key_event(key_event)
@@ -51,7 +53,7 @@ impl App {
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        Paragraph::new("Testing here!")
+        Paragraph::new("Hello Spotui")
             .centered()
             .block(Block::bordered().title(" use <q> or <Ctrl + c> to quit the program "))
             .render(area, buf);

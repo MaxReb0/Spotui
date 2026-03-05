@@ -6,4 +6,11 @@ edition = "2024"
 [dependencies]
 color-eyre = "0.6.5"
 crossterm = "0.29.0"
+directories = "6.0.0"
+lazy_static = "1.5.0"
 ratatui = "0.30.0"
+rspotify = { version = "0.15.3", features = ["cli", "env-file"]}
+tokio = { version = "1.50.0", features = ["full"]}
+tracing = "0.1.44"
+tracing-error = "0.2.1"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }

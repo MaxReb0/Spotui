@@ -82,15 +82,15 @@ Before writing any Spotify code, get comfortable with each piece.
 
 Goal: A working TUI that handles keyboard input and quits cleanly.
 
-- [ ] Add `crossterm` to Cargo.toml
-- [ ] Set up the terminal: `enable_raw_mode()`, `EnterAlternateScreen`
-- [ ] Write a `restore_terminal()` cleanup function and call it on panic too
-- [ ] Create a basic `App` struct with a `should_quit: bool` field
-- [ ] Implement the main loop:
+- [x] Add `crossterm` to Cargo.toml
+- [x] Set up the terminal: `enable_raw_mode()`, `EnterAlternateScreen`
+- [x] Write a `restore_terminal()` cleanup function and call it on panic too
+- [x] Create a basic `App` struct with a `should_quit: bool` field
+- [x] Implement the main loop:
   - Poll for crossterm events
   - Handle `q` / `Ctrl+C` to quit
   - Call `terminal.draw(...)` each tick
-- [ ] Render a simple "Hello Spotui" centered block
+- [x] Render a simple "Hello Spotui" centered block
 
 **Milestone:** `cargo run` opens a TUI, shows text, `q` exits cleanly.
 
@@ -103,9 +103,9 @@ Goal: Get an OAuth access token stored locally.
 - [ ] Read the Spotify Web API docs on Authorization Code with PKCE
   - https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow
 - [ ] Create a Spotify app at https://developer.spotify.com/dashboard
-  - Set redirect URI to `http://localhost:8888/callback`
-- [ ] Add `rspotify` to Cargo.toml (with `client-reqwest` feature)
-- [ ] Add `tokio` with `full` features
+  - Set redirect URI to `https://localhost:8888/callback`
+- [x] Add `rspotify` to Cargo.toml (with `client-reqwest` feature)
+- [x] Add `tokio` with `full` features
 - [ ] Write `spotify/auth.rs`:
   - Build the auth URL and open it in the browser (`open` crate or `std::process::Command`)
   - Spin up a minimal local HTTP listener to catch the callback code

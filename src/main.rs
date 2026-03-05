@@ -1,24 +1,22 @@
 use color_eyre::eyre::Result;
-use ratatui::{Frame, style::Stylize, text::Line};
 
 mod app;
-use app::App;
+mod logging;
+mod spotify;
 
-fn main() -> Result<()> {
+use app::App;
+use logging::initialize_logging;
+use spotify::auth::auth;
+
+#[tokio::main]
+async fn main() -> Result<()> {
     color_eyre::install()?;
-    // let mut terminal = ratatui::init();
-    ratatui::run(|terminal| App::default().run(terminal))?;
-    // ratatui::run(|terminal| );
+    initialize_logging()?;
+    tracing::debug!("Spotui has started!");
+    auth().await?;
+    let mut terminal = ratatui::init();
+    App::default().run(&mut terminal)?;
+    tracing::debug!("Spotui has finished!");
     ratatui::restore();
     Ok(())
-}
-
-fn render(frame: &mut Frame) {
-    let title = Line::from(" Hello, this is actually working! ".bold());
-    let block = ratatui::widgets::Block::bordered()
-        .title(title.centered())
-        .border_type(ratatui::widgets::BorderType::HeavyDoubleDashed)
-        .title("TESTING");
-
-    frame.render_widget(block, frame.area());
 }
