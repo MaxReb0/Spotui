@@ -22,7 +22,7 @@ use strum_macros::{Display, EnumIter};
 use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamExt;
 
-#[derive(Debug, Display, EnumIter, Clone, Copy)]
+#[derive(Debug, Display, EnumIter, Clone, Copy, PartialEq)]
 enum View {
     Home,
     Search,
@@ -30,11 +30,22 @@ enum View {
     //TODO: Add more to this as new pages are added.
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum InputMode {
+    Normal,
+    Editing,
+}
+
 #[derive(Debug)]
 pub struct App {
     exit: bool,
     spotify_client: Arc<dyn SpotifyApi>,
     current_view: View,
+    // NOTE: Added for new search functionality, remove at the end of phase 5 or if changing
+    // implmentation
+    input_mode: InputMode,
+    search_query: String,
+    character_index: usize,
 }
 
 impl App {
@@ -43,6 +54,9 @@ impl App {
             exit: false,
             spotify_client,
             current_view: View::Home,
+            input_mode: InputMode::Normal,
+            search_query: String::new(),
+            character_index: 0,
         }
     }
 
@@ -63,12 +77,66 @@ impl App {
         Ok(())
     }
 
+    fn search(&mut self) {
+        self.character_index = 0;
+        self.search_query = String::new();
+        //TODO: Actually trigger the client to send the API request here!
+    }
+    fn move_cursor_left(&mut self) {
+        let cursor_moved_left = self.character_index.saturating_sub(1);
+        self.character_index = self.clamp_cursor(cursor_moved_left);
+    }
+
+    fn move_cursor_right(&mut self) {
+        let cursor_moved_right = self.character_index.saturating_add(1);
+        self.character_index = self.clamp_cursor(cursor_moved_right);
+    }
+
+    fn enter_char(&mut self, new_char: char) {
+        let index = self.byte_index();
+        self.search_query.insert(index, new_char);
+        self.move_cursor_right();
+    }
+
+    fn byte_index(&self) -> usize {
+        self.search_query
+            .char_indices()
+            .map(|(i, _)| i)
+            .nth(self.character_index)
+            .unwrap_or(self.search_query.len())
+    }
+
+    fn delete_char(&mut self) {
+        if self.character_index != 0 {
+            let current_index = self.character_index;
+            let from_left_to_current_index = current_index - 1;
+
+            let before_char_to_delete = self.search_query.chars().take(from_left_to_current_index);
+            let after_char_to_delete = self.search_query.chars().skip(current_index);
+
+            self.search_query = before_char_to_delete.chain(after_char_to_delete).collect();
+            self.move_cursor_left();
+        }
+    }
+
+    fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
+        new_cursor_pos.clamp(0, self.search_query.chars().count())
+    }
+
     fn draw(&self, frame: &mut Frame) {
         frame.render_widget(self, frame.area());
     }
 
     pub fn username(&self) -> Option<&str> {
         self.spotify_client.username()
+    }
+
+    pub fn current_input_mode(&self) -> InputMode {
+        self.input_mode.clone()
+    }
+
+    pub fn search_query(&self) -> String {
+        self.search_query.clone()
     }
 
     fn render_bottom_bar(area: Rect, buf: &mut Buffer) {
@@ -103,6 +171,10 @@ impl App {
         self.current_view = view;
     }
 
+    fn change_input(&mut self, input_mode: InputMode) {
+        self.input_mode = input_mode
+    }
+
     async fn handle_events(&mut self, event: Event, tx: &Sender<SpotifyEvent>) -> Result<()> {
         match event {
             Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
@@ -118,31 +190,52 @@ impl App {
         key_event: KeyEvent,
         tx: &Sender<SpotifyEvent>,
     ) -> Result<()> {
-        match key_event.code {
-            KeyCode::Char('q') => self.exit(),
-            KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.exit()
-            }
-            KeyCode::Enter => {
-                let tx = tx.clone();
-                let spotify_client = Arc::clone(&self.spotify_client);
-                tokio::spawn(async move {
-                    match spotify_client.current_playback().await {
-                        Ok(data) => {
-                            tx.send(SpotifyEvent::CurrentlyPlaying(data)).await.ok();
-                        }
-                        Err(e) => {
-                            trace_dbg!(level: tracing::Level::ERROR, e.to_string());
-                        }
+        match self.input_mode {
+            InputMode::Normal => {
+                match key_event.code {
+                    KeyCode::Char('q') => self.exit(),
+                    KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                        self.exit()
                     }
-                });
+                    //TODO: Temporary config here! Determine later if 'i' is the best option.
+                    KeyCode::Char('i')
+                        if self.current_view == View::Search
+                            && self.input_mode == InputMode::Normal =>
+                    {
+                        self.change_input(InputMode::Editing)
+                    }
+                    KeyCode::Char('1') => self.change_view(View::Home),
+                    KeyCode::Char('2') => self.change_view(View::Search),
+                    KeyCode::Char('3') => self.change_view(View::Playlists),
+                    _ => {}
+                };
+                Ok(())
             }
-            KeyCode::Char('1') => self.change_view(View::Home),
-            KeyCode::Char('2') => self.change_view(View::Search),
-            KeyCode::Char('3') => self.change_view(View::Playlists),
-            _ => {}
-        };
-        Ok(())
+            InputMode::Editing => {
+                match key_event.code {
+                    KeyCode::Enter => {
+                        self.search();
+                    }
+                    KeyCode::Char(new_char) => {
+                        self.enter_char(new_char);
+                    }
+                    KeyCode::Backspace => {
+                        self.delete_char();
+                    }
+                    KeyCode::Left => {
+                        self.move_cursor_left();
+                    }
+                    KeyCode::Right => {
+                        self.move_cursor_right();
+                    }
+                    KeyCode::Esc => {
+                        self.change_input(InputMode::Normal);
+                    }
+                    _ => {}
+                };
+                Ok(())
+            }
+        }
     }
 }
 
@@ -226,16 +319,6 @@ mod tests {
         let key = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
         app.handle_key_event(key, &tx).await.unwrap();
         assert!(app.exit)
-    }
-
-    #[tokio::test]
-    async fn enter_sends_spotify_event() {
-        let mut app = make_app(Some("Test User"));
-        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-        let key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-        app.handle_key_event(key, &tx).await.unwrap();
-        let result = rx.recv().await.unwrap();
-        assert_eq!(result, SpotifyEvent::CurrentlyPlaying(None))
     }
 
     #[tokio::test]
