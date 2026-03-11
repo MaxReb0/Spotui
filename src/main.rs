@@ -3,6 +3,7 @@ use color_eyre::eyre::Result;
 mod app;
 mod logging;
 mod spotify;
+mod ui;
 
 use app::App;
 use logging::initialize_logging;

@@ -1,19 +1,28 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::spotify::spotify_event::SpotifyEvent;
+use crate::ui;
 use crate::{spotify::client::SpotifyApi, trace_dbg};
 use color_eyre::eyre::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use itertools::Itertools;
+use ratatui::layout::Layout;
+use ratatui::style::{Color, Style};
+use ratatui::symbols;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::Tabs;
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
-    layout::Rect,
-    widgets::{Block, Paragraph, Widget},
+    layout::{Constraint, Rect},
+    widgets::Widget,
 };
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumIter};
 use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamExt;
 
-#[derive(Debug)]
+#[derive(Debug, Display, EnumIter, Clone, Copy)]
 enum View {
     Home,
     Search,
@@ -56,6 +65,34 @@ impl App {
 
     fn draw(&self, frame: &mut Frame) {
         frame.render_widget(self, frame.area());
+    }
+
+    pub fn username(&self) -> Option<&str> {
+        self.spotify_client.username()
+    }
+
+    fn render_bottom_bar(area: Rect, buf: &mut Buffer) {
+        // TODO: Clean up UI
+        let keys = [
+            ("H/←", "Left"),
+            ("L/→", "Right"),
+            ("K/↑", "Up"),
+            ("J/↓", "Down"),
+            ("Q/(Ctrl + C)", "Quit"),
+        ];
+        let spans = keys
+            .iter()
+            .flat_map(|(key, desc)| {
+                let key = Span::styled(format!(" {key} "), Color::Green);
+                let desc = Span::styled(format!(" {desc} "), Color::Green);
+                [key, desc]
+            })
+            .collect_vec();
+
+        Line::from(spans)
+            .centered()
+            .style((Color::Indexed(236), Color::Indexed(232)))
+            .render(area, buf);
     }
 
     fn exit(&mut self) {
@@ -111,26 +148,34 @@ impl App {
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let layout = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
+        .split(area);
+
+        let titles = View::iter().map(|v| v.to_string());
+        let selected = self.current_view as usize;
+
+        Tabs::new(titles)
+            .select(selected)
+            .style(Style::default().green())
+            .divider(symbols::DOT)
+            .render(layout[0], buf);
+
         match self.current_view {
             View::Home => {
-                let welcome_string = format!(
-                    "Hello, {}!",
-                    self.spotify_client.username().unwrap_or("Unknown User")
-                );
-                Paragraph::new(welcome_string)
-                    .centered()
-                    .block(Block::bordered().title(" use <q> or <Ctrl + c> to quit the program "))
-                    .render(area, buf);
+                ui::home::render(layout[1], buf, self);
             }
-            _ => {
-                Paragraph::new("TBD!")
-                    .centered()
-                    .block(
-                        Block::bordered().title(" use the numbers to change to a different view!"),
-                    )
-                    .render(area, buf);
+            View::Search => {
+                ui::search::render(layout[1], buf, self);
+            }
+            View::Playlists => {
+                ui::playlists::render(layout[1], buf, self);
             }
         }
+        App::render_bottom_bar(layout[2], buf);
     }
 }
 

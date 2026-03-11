@@ -136,10 +136,10 @@ Goal: Build the structural shell that all future views live inside.
 - [x] Define a `View` enum: `Home`, `Search`, `Playlists`
 - [x] Store `current_view: View` in `App`
 - [x] Map keys to switch views: `1` = Home, `2` = Search, `3` = Playlists
-- [ ] Build a tab bar at the top showing the active view
-- [ ] Build a footer showing context-sensitive keybindings
-- [ ] Create stub render functions for each view in `ui/`
-- [ ] Implement overall layout split: tab bar / content area / footer
+- [x] Build a tab bar at the top showing the active view
+- [x] Build a footer showing context-sensitive keybindings
+- [x] Create stub render functions for each view in `ui/`
+- [x] Implement overall layout split: tab bar / content area / footer
 
 **Key concept:** ratatui's `Layout` with `Constraint::Length` for fixed-height bars and `Constraint::Min` for the content area.
 

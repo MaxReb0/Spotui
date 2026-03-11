@@ -8,9 +8,12 @@ async-trait = "0.1.89"
 color-eyre = "0.6.5"
 crossterm = { version = "0.29.0", features = ["event-stream"]}
 directories = "6.0.0"
+itertools = "0.14.0"
 lazy_static = "1.5.0"
 ratatui = "0.30.0"
 rspotify = { version = "0.15.3", features = ["cli", "env-file"]}
+strum = "0.28.0"
+strum_macros = "0.28.0"
 tokio = { version = "1.50.0", features = ["full"]}
 tokio-stream = "0.1.18"
 tracing = "0.1.44"
