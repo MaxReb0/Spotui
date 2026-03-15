@@ -1,5 +1,5 @@
 use ratatui::{
-    buffer::Buffer,
+    Frame,
     layout::Rect,
     prelude::Widget,
     widgets::{Block, Paragraph},
@@ -7,10 +7,10 @@ use ratatui::{
 
 use crate::app::App;
 
-pub fn render(area: Rect, buf: &mut Buffer, _app: &App) {
+pub fn render(area: Rect, frame: &mut Frame, _app: &App) {
     let welcome = String::from("TBD!");
     Paragraph::new(welcome)
         .centered()
         .block(Block::bordered().title(" Playlists "))
-        .render(area, buf);
+        .render(area, frame.buffer_mut());
 }

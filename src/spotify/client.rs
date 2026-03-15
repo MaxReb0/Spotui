@@ -47,6 +47,7 @@ impl SpotifyClient {
 pub trait SpotifyApi: Send + Sync + Debug {
     fn username(&self) -> Option<&str>;
     async fn current_playback(&self) -> Result<Option<CurrentlyPlayingContext>>;
+    async fn search(&self, query: &str) -> Result<SearchResult>;
 }
 
 #[async_trait]
@@ -57,5 +58,19 @@ impl SpotifyApi for SpotifyClient {
 
     async fn current_playback(&self) -> Result<Option<CurrentlyPlayingContext>> {
         Ok(self.spotify_web_client.current_user_playing_item().await?)
+    }
+
+    async fn search(&self, query: &str) -> Result<SearchResult> {
+        Ok(self
+            .spotify_web_client
+            .search(
+                query,
+                rspotify::model::SearchType::Album,
+                None,
+                None,
+                Some(10),
+                None,
+            )
+            .await?)
     }
 }

@@ -1,14 +1,15 @@
 use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Layout, Rect},
+    Frame,
+    layout::{Constraint, Layout, Position, Rect},
     prelude::Widget,
     style::{Color, Style},
-    widgets::{Block, Paragraph},
+    widgets::{Block, List, Paragraph},
 };
+use rspotify::model::SearchResult;
 
 use crate::app::{App, InputMode};
 
-pub fn render(area: Rect, buf: &mut Buffer, app: &App) {
+pub fn render(area: Rect, frame: &mut Frame, app: &App) {
     let [help_area, search_bar, results] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(3),
@@ -20,11 +21,40 @@ pub fn render(area: Rect, buf: &mut Buffer, app: &App) {
     //
     //
 
+    // Search Bar.
     Paragraph::new(app.search_query().as_str())
         .style(match app.current_input_mode() {
             InputMode::Normal => Style::default(),
             InputMode::Editing => Style::default().fg(Color::Yellow),
         })
         .block(Block::bordered().title("Input"))
-        .render(search_bar, buf);
+        .render(search_bar, frame.buffer_mut());
+
+    // TODO: Investigate why the cursor is not blinking.
+    match app.current_input_mode() {
+        InputMode::Normal => {}
+        InputMode::Editing => frame.set_cursor_position(Position::new(
+            search_bar.x + app.character_index() as u16 + 1,
+            search_bar.y + 1,
+        )),
+    }
+
+    // Now draw the results page.
+    if let Some(data) = app.search_results() {
+        // TODO: Handle rendering of SearchResult here.
+        match data {
+            SearchResult::Albums(page) => {
+                let names: Vec<String> = page.items.iter().map(|t| t.name.clone()).collect();
+                let list = List::new(names).block(Block::bordered().title("Results"));
+                frame.render_widget(list, results);
+            }
+            SearchResult::Tracks(page) => {}
+            _ => {}
+        }
+    } else {
+        Paragraph::new("")
+            .centered()
+            .block(Block::bordered().title("Results"))
+            .render(results, frame.buffer_mut());
+    }
 }

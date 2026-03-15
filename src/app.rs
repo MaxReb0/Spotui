@@ -1,8 +1,9 @@
 use std::{sync::Arc, time::Duration};
 
+use crate::spotify::client::SpotifyApi;
 use crate::spotify::spotify_event::SpotifyEvent;
+use crate::trace_dbg;
 use crate::ui;
-use crate::{spotify::client::SpotifyApi, trace_dbg};
 use color_eyre::eyre::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use itertools::Itertools;
@@ -17,6 +18,7 @@ use ratatui::{
     layout::{Constraint, Rect},
     widgets::Widget,
 };
+use rspotify::model::SearchResult;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 use tokio::sync::mpsc::Sender;
@@ -41,11 +43,11 @@ pub struct App {
     exit: bool,
     spotify_client: Arc<dyn SpotifyApi>,
     current_view: View,
-    // NOTE: Added for new search functionality, remove at the end of phase 5 or if changing
-    // implmentation
+    // Search results data:
     input_mode: InputMode,
     search_query: String,
     character_index: usize,
+    search_results: Option<SearchResult>,
 }
 
 impl App {
@@ -54,9 +56,11 @@ impl App {
             exit: false,
             spotify_client,
             current_view: View::Home,
+            // Search results data:
             input_mode: InputMode::Normal,
             search_query: String::new(),
             character_index: 0,
+            search_results: None,
         }
     }
 
@@ -71,16 +75,40 @@ impl App {
             tokio::select! {
                 _ = interval.tick() => {terminal.draw(|frame| self.draw(frame))?;},
                 Some(Ok(event)) = events.next() => {self.handle_events(event, &tx).await?;}
-                Some(_) = rx.recv() => {}
+                Some(event) = rx.recv() => {
+                    match event {
+                        SpotifyEvent::CurrentlyPlaying(_) => {},
+                        SpotifyEvent::SearchResults(data) => {
+                            self.search_results = Some(data);
+                        },
+                    }
+                }
             }
         }
         Ok(())
     }
 
-    fn search(&mut self) {
+    fn search(&mut self, tx: &Sender<SpotifyEvent>) {
+        // TODO: Implement the actual search functionality here.
+        // Will need to put this in a thread. That thread will then publish an event that will
+        // save the data to the search results value
+        let tx = tx.clone();
+        let search_query = self.search_query();
+        let spotify_client = Arc::clone(&self.spotify_client);
+        tokio::spawn(async move {
+            match spotify_client.search(search_query.as_str()).await {
+                Ok(search_results) => {
+                    tx.send(SpotifyEvent::SearchResults(search_results))
+                        .await
+                        .ok();
+                }
+                Err(e) => {
+                    trace_dbg!(level: tracing::Level::ERROR, e.to_string());
+                }
+            }
+        });
         self.character_index = 0;
         self.search_query = String::new();
-        //TODO: Actually trigger the client to send the API request here!
     }
     fn move_cursor_left(&mut self) {
         let cursor_moved_left = self.character_index.saturating_sub(1);
@@ -124,11 +152,42 @@ impl App {
     }
 
     fn draw(&self, frame: &mut Frame) {
-        frame.render_widget(self, frame.area());
+        let layout = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
+        .split(frame.area());
+
+        let titles = View::iter().map(|v| v.to_string());
+        let selected = self.current_view as usize;
+
+        Tabs::new(titles)
+            .select(selected)
+            .style(Style::default().green())
+            .divider(symbols::DOT)
+            .render(layout[0], frame.buffer_mut());
+
+        match self.current_view {
+            View::Home => {
+                ui::home::render(layout[1], frame, self);
+            }
+            View::Search => {
+                ui::search::render(layout[1], frame, self);
+            }
+            View::Playlists => {
+                ui::playlists::render(layout[1], frame, self);
+            }
+        }
+        App::render_bottom_bar(layout[2], frame.buffer_mut());
     }
 
     pub fn username(&self) -> Option<&str> {
         self.spotify_client.username()
+    }
+
+    pub fn character_index(&self) -> usize {
+        self.character_index
     }
 
     pub fn current_input_mode(&self) -> InputMode {
@@ -137,6 +196,10 @@ impl App {
 
     pub fn search_query(&self) -> String {
         self.search_query.clone()
+    }
+
+    pub fn search_results(&self) -> Option<SearchResult> {
+        self.search_results.clone()
     }
 
     fn render_bottom_bar(area: Rect, buf: &mut Buffer) {
@@ -214,7 +277,7 @@ impl App {
             InputMode::Editing => {
                 match key_event.code {
                     KeyCode::Enter => {
-                        self.search();
+                        self.search(tx);
                     }
                     KeyCode::Char(new_char) => {
                         self.enter_char(new_char);
@@ -239,49 +302,17 @@ impl App {
     }
 }
 
-impl Widget for &App {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        let layout = Layout::vertical([
-            Constraint::Length(3),
-            Constraint::Min(0),
-            Constraint::Length(1),
-        ])
-        .split(area);
-
-        let titles = View::iter().map(|v| v.to_string());
-        let selected = self.current_view as usize;
-
-        Tabs::new(titles)
-            .select(selected)
-            .style(Style::default().green())
-            .divider(symbols::DOT)
-            .render(layout[0], buf);
-
-        match self.current_view {
-            View::Home => {
-                ui::home::render(layout[1], buf, self);
-            }
-            View::Search => {
-                ui::search::render(layout[1], buf, self);
-            }
-            View::Playlists => {
-                ui::playlists::render(layout[1], buf, self);
-            }
-        }
-        App::render_bottom_bar(layout[2], buf);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use async_trait::async_trait;
     use color_eyre::eyre::Ok;
-    use rspotify::model::CurrentlyPlayingContext;
+    use rspotify::model::{CurrentlyPlayingContext, Page, SearchResult};
 
     #[derive(Debug)]
     struct MockSpotifyApi {
         username: Option<String>,
+        //TODO: Add some more values here to better test the app state after search.
     }
 
     #[async_trait]
@@ -292,6 +323,11 @@ mod tests {
 
         async fn current_playback(&self) -> Result<Option<CurrentlyPlayingContext>> {
             Ok(None)
+        }
+
+        // TODO: Need to flesh this out so I can actually test it. Right now it is just defaulted.
+        async fn search(&self, _query: &str) -> Result<SearchResult> {
+            Ok(SearchResult::Albums(Page::default()))
         }
     }
 
