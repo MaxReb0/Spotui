@@ -5,7 +5,7 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::app::App;
+use crate::app::app::App;
 
 pub fn render(area: Rect, frame: &mut Frame, app: &App) {
     let welcome = format!("Hello, {}!", app.username().unwrap_or("Unknown"));

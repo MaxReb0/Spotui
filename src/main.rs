@@ -5,7 +5,7 @@ mod logging;
 mod spotify;
 mod ui;
 
-use app::App;
+use app::app::App;
 use logging::initialize_logging;
 use spotify::auth::auth;
 use std::sync::Arc;

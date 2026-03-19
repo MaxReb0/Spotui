@@ -5,7 +5,7 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::app::App;
+use crate::app::app::App;
 
 pub fn render(area: Rect, frame: &mut Frame, _app: &App) {
     let welcome = String::from("TBD!");

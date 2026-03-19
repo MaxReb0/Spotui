@@ -1,8 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
+use crate::app::search_results::SearchResults;
 use crate::spotify::client::SpotifyApi;
 use crate::spotify::spotify_event::SpotifyEvent;
-use crate::trace_dbg;
 use crate::ui;
 use color_eyre::eyre::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -18,7 +18,7 @@ use ratatui::{
     layout::{Constraint, Rect},
     widgets::Widget,
 };
-use rspotify::model::SearchResult;
+use rspotify::model::SearchType;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 use tokio::sync::mpsc::Sender;
@@ -46,8 +46,11 @@ pub struct App {
     // Search results data:
     input_mode: InputMode,
     search_query: String,
+    last_search_query: String, // Used for lazy searching data.
     character_index: usize,
-    search_results: Option<SearchResult>,
+    search_results: SearchResults,
+    active_search_type: SearchType,
+    fetch_in_flight: bool,
 }
 
 impl App {
@@ -59,8 +62,11 @@ impl App {
             // Search results data:
             input_mode: InputMode::Normal,
             search_query: String::new(),
+            last_search_query: String::new(),
             character_index: 0,
-            search_results: None,
+            search_results: SearchResults::default(),
+            active_search_type: SearchType::Track,
+            fetch_in_flight: false,
         }
     }
 
@@ -78,8 +84,8 @@ impl App {
                 Some(event) = rx.recv() => {
                     match event {
                         SpotifyEvent::CurrentlyPlaying(_) => {},
-                        SpotifyEvent::SearchResults(data) => {
-                            self.search_results = Some(data);
+                        SpotifyEvent::NewSearchResults(data) => {
+                            self.search_results = data;
                         },
                     }
                 }
@@ -94,22 +100,23 @@ impl App {
         // save the data to the search results value
         let tx = tx.clone();
         let search_query = self.search_query();
+        let search_type = self.active_search_type.clone();
         let spotify_client = Arc::clone(&self.spotify_client);
         tokio::spawn(async move {
-            match spotify_client.search(search_query.as_str()).await {
-                Ok(search_results) => {
-                    tx.send(SpotifyEvent::SearchResults(search_results))
-                        .await
-                        .ok();
-                }
-                Err(e) => {
-                    trace_dbg!(level: tracing::Level::ERROR, e.to_string());
-                }
-            }
+            let (r1, r2, r3, r4, r5) = tokio::join!(
+                spotify_client.search(search_type, 0, search_query.as_str()),
+                spotify_client.search(search_type, 10, search_query.as_str()),
+                spotify_client.search(search_type, 20, search_query.as_str()),
+                spotify_client.search(search_type, 30, search_query.as_str()),
+                spotify_client.search(search_type, 40, search_query.as_str()),
+            );
+            let combined = SearchResults::from_pages([r1, r2, r3, r4, r5]);
+            tx.send(SpotifyEvent::NewSearchResults(combined)).await.ok();
         });
         self.character_index = 0;
         self.search_query = String::new();
     }
+
     fn move_cursor_left(&mut self) {
         let cursor_moved_left = self.character_index.saturating_sub(1);
         self.character_index = self.clamp_cursor(cursor_moved_left);
@@ -182,6 +189,10 @@ impl App {
         App::render_bottom_bar(layout[2], frame.buffer_mut());
     }
 
+    pub fn active_search_type(&self) -> SearchType {
+        self.active_search_type.clone()
+    }
+
     pub fn username(&self) -> Option<&str> {
         self.spotify_client.username()
     }
@@ -198,7 +209,7 @@ impl App {
         self.search_query.clone()
     }
 
-    pub fn search_results(&self) -> Option<SearchResult> {
+    pub fn search_results(&self) -> SearchResults {
         self.search_results.clone()
     }
 
@@ -325,8 +336,12 @@ mod tests {
             Ok(None)
         }
 
-        // TODO: Need to flesh this out so I can actually test it. Right now it is just defaulted.
-        async fn search(&self, _query: &str) -> Result<SearchResult> {
+        async fn search(
+            &self,
+            _search_type: SearchType,
+            _offset: u32,
+            _query: &str,
+        ) -> Result<SearchResult> {
             Ok(SearchResult::Albums(Page::default()))
         }
     }

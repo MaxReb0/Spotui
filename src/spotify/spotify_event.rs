@@ -1,7 +1,9 @@
-use rspotify::model::{CurrentlyPlayingContext, SearchResult};
+use rspotify::model::CurrentlyPlayingContext;
 
-#[derive(Debug, PartialEq)]
+use crate::app::search_results::SearchResults;
+
+#[derive(Debug)]
 pub enum SpotifyEvent {
     CurrentlyPlaying(Option<CurrentlyPlayingContext>),
-    SearchResults(SearchResult),
+    NewSearchResults(SearchResults),
 }

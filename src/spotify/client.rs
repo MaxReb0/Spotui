@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use color_eyre::eyre::Result;
 use rspotify::{
     AuthCodePkceSpotify,
-    model::{CurrentlyPlayingContext, SearchResult},
+    model::{CurrentlyPlayingContext, SearchResult, SearchType},
     prelude::{BaseClient, OAuthClient},
 };
 use std::fmt::Debug;
@@ -26,28 +26,18 @@ impl SpotifyClient {
         self.username = Some(user.display_name.unwrap_or(user.id.to_string()));
         Ok(())
     }
-
-    pub async fn search(&mut self, query: &str) -> Result<SearchResult> {
-        // TODO: Add usage for this.
-        Ok(self
-            .spotify_web_client
-            .search(
-                query,
-                rspotify::model::SearchType::Track,
-                None,
-                None,
-                None,
-                None,
-            )
-            .await?)
-    }
 }
 
 #[async_trait]
 pub trait SpotifyApi: Send + Sync + Debug {
     fn username(&self) -> Option<&str>;
     async fn current_playback(&self) -> Result<Option<CurrentlyPlayingContext>>;
-    async fn search(&self, query: &str) -> Result<SearchResult>;
+    async fn search(
+        &self,
+        search_type: SearchType,
+        offset: u32,
+        query: &str,
+    ) -> Result<SearchResult>;
 }
 
 #[async_trait]
@@ -60,17 +50,15 @@ impl SpotifyApi for SpotifyClient {
         Ok(self.spotify_web_client.current_user_playing_item().await?)
     }
 
-    async fn search(&self, query: &str) -> Result<SearchResult> {
+    async fn search(
+        &self,
+        search_type: SearchType,
+        offset: u32,
+        query: &str,
+    ) -> Result<SearchResult> {
         Ok(self
             .spotify_web_client
-            .search(
-                query,
-                rspotify::model::SearchType::Album,
-                None,
-                None,
-                Some(10),
-                None,
-            )
+            .search(query, search_type, None, None, Some(10), Some(offset))
             .await?)
     }
 }

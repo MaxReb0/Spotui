@@ -5,9 +5,9 @@ use ratatui::{
     style::{Color, Style},
     widgets::{Block, List, Paragraph},
 };
-use rspotify::model::SearchResult;
+use rspotify::model::{SearchResult, SearchType};
 
-use crate::app::{App, InputMode};
+use crate::app::app::{App, InputMode};
 
 pub fn render(area: Rect, frame: &mut Frame, app: &App) {
     let [help_area, search_bar, results] = Layout::vertical([
@@ -40,21 +40,22 @@ pub fn render(area: Rect, frame: &mut Frame, app: &App) {
     }
 
     // Now draw the results page.
-    if let Some(data) = app.search_results() {
-        // TODO: Handle rendering of SearchResult here.
-        match data {
-            SearchResult::Albums(page) => {
-                let names: Vec<String> = page.items.iter().map(|t| t.name.clone()).collect();
+    match app.active_search_type() {
+        SearchType::Track => {
+            if let Some(data) = app.search_results().tracks {
+                let names: Vec<String> = data.items.iter().map(|t| t.name.clone()).collect();
                 let list = List::new(names).block(Block::bordered().title("Results"));
                 frame.render_widget(list, results);
+            } else {
+                Paragraph::new("")
+                    .centered()
+                    .block(Block::bordered().title("Results"))
+                    .render(results, frame.buffer_mut());
             }
-            SearchResult::Tracks(page) => {}
-            _ => {}
         }
-    } else {
-        Paragraph::new("")
-            .centered()
-            .block(Block::bordered().title("Results"))
-            .render(results, frame.buffer_mut());
+        SearchType::Album => {
+            println!("Whoa")
+        }
+        _ => {}
     }
 }
