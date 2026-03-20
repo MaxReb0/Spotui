@@ -5,7 +5,7 @@ use ratatui::{
     style::{Color, Style},
     widgets::{Block, List, Paragraph},
 };
-use rspotify::model::{SearchResult, SearchType};
+use rspotify::model::SearchType;
 
 use crate::app::app::{App, InputMode};
 
@@ -21,7 +21,8 @@ pub fn render(area: Rect, frame: &mut Frame, app: &App) {
     //
     //
 
-    // Search Bar.
+    // Search Bar implementation. It needs to be displayed differently based off the state you are
+    // in
     Paragraph::new(app.search_query().as_str())
         .style(match app.current_input_mode() {
             InputMode::Normal => Style::default(),
@@ -54,7 +55,7 @@ pub fn render(area: Rect, frame: &mut Frame, app: &App) {
             }
         }
         SearchType::Album => {
-            println!("Whoa")
+            println!("TBD")
         }
         _ => {}
     }

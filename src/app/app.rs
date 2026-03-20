@@ -46,11 +46,11 @@ pub struct App {
     // Search results data:
     input_mode: InputMode,
     search_query: String,
-    last_search_query: String, // Used for lazy searching data.
+    _last_search_query: String, // Used for lazy searching data.
     character_index: usize,
     search_results: SearchResults,
     active_search_type: SearchType,
-    fetch_in_flight: bool,
+    _fetch_in_flight: bool,
 }
 
 impl App {
@@ -62,11 +62,11 @@ impl App {
             // Search results data:
             input_mode: InputMode::Normal,
             search_query: String::new(),
-            last_search_query: String::new(),
+            _last_search_query: String::new(),
             character_index: 0,
             search_results: SearchResults::default(),
             active_search_type: SearchType::Track,
-            fetch_in_flight: false,
+            _fetch_in_flight: false,
         }
     }
 
@@ -100,7 +100,7 @@ impl App {
         // save the data to the search results value
         let tx = tx.clone();
         let search_query = self.search_query();
-        let search_type = self.active_search_type.clone();
+        let search_type = self.active_search_type;
         let spotify_client = Arc::clone(&self.spotify_client);
         tokio::spawn(async move {
             let (r1, r2, r3, r4, r5) = tokio::join!(
@@ -190,7 +190,7 @@ impl App {
     }
 
     pub fn active_search_type(&self) -> SearchType {
-        self.active_search_type.clone()
+        self.active_search_type
     }
 
     pub fn username(&self) -> Option<&str> {
@@ -278,6 +278,9 @@ impl App {
                     {
                         self.change_input(InputMode::Editing)
                     }
+                    //TODO: Implement this!
+                    KeyCode::Char('i') => todo!("Implement this for moving up the search list"),
+                    KeyCode::Char('j') => todo!("Implement this for moving down the search list"),
                     KeyCode::Char('1') => self.change_view(View::Home),
                     KeyCode::Char('2') => self.change_view(View::Search),
                     KeyCode::Char('3') => self.change_view(View::Playlists),

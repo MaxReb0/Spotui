@@ -44,46 +44,44 @@ impl SearchResults {
     //TODO: Add some documentation here.
     pub fn from_pages(pages: impl IntoIterator<Item = Result<SearchResult>>) -> Self {
         let mut results = SearchResults::default();
-        for result in pages {
-            if let Ok(sr) = result {
-                match sr {
-                    SearchResult::Tracks(page) => match results.tracks {
-                        None => {
-                            results.tracks =
-                                Some(SearchTypeResults::from_first_page(page.items, page.total))
-                        }
-                        Some(ref mut r) => r.append_page(page.items),
-                    },
-                    SearchResult::Albums(page) => match results.albums {
-                        None => {
-                            results.albums =
-                                Some(SearchTypeResults::from_first_page(page.items, page.total))
-                        }
-                        Some(ref mut r) => r.append_page(page.items),
-                    },
-                    SearchResult::Artists(page) => match results.artists {
-                        None => {
-                            results.artists =
-                                Some(SearchTypeResults::from_first_page(page.items, page.total))
-                        }
-                        Some(ref mut r) => r.append_page(page.items),
-                    },
-                    SearchResult::Shows(page) => match results.shows {
-                        None => {
-                            results.shows =
-                                Some(SearchTypeResults::from_first_page(page.items, page.total))
-                        }
-                        Some(ref mut r) => r.append_page(page.items),
-                    },
-                    SearchResult::Playlists(page) => match results.playlists {
-                        None => {
-                            results.playlists =
-                                Some(SearchTypeResults::from_first_page(page.items, page.total))
-                        }
-                        Some(ref mut r) => r.append_page(page.items),
-                    },
-                    _ => {}
-                }
+        for sr in pages.into_iter().flatten() {
+            match sr {
+                SearchResult::Tracks(page) => match results.tracks {
+                    None => {
+                        results.tracks =
+                            Some(SearchTypeResults::from_first_page(page.items, page.total))
+                    }
+                    Some(ref mut r) => r.append_page(page.items),
+                },
+                SearchResult::Albums(page) => match results.albums {
+                    None => {
+                        results.albums =
+                            Some(SearchTypeResults::from_first_page(page.items, page.total))
+                    }
+                    Some(ref mut r) => r.append_page(page.items),
+                },
+                SearchResult::Artists(page) => match results.artists {
+                    None => {
+                        results.artists =
+                            Some(SearchTypeResults::from_first_page(page.items, page.total))
+                    }
+                    Some(ref mut r) => r.append_page(page.items),
+                },
+                SearchResult::Shows(page) => match results.shows {
+                    None => {
+                        results.shows =
+                            Some(SearchTypeResults::from_first_page(page.items, page.total))
+                    }
+                    Some(ref mut r) => r.append_page(page.items),
+                },
+                SearchResult::Playlists(page) => match results.playlists {
+                    None => {
+                        results.playlists =
+                            Some(SearchTypeResults::from_first_page(page.items, page.total))
+                    }
+                    Some(ref mut r) => r.append_page(page.items),
+                },
+                _ => {}
             }
         }
         results
