@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use crate::app::search_results::SearchResults;
 use crate::spotify::client::SpotifyApi;
 use crate::spotify::spotify_event::SpotifyEvent;
-use crate::ui;
+use crate::{trace_dbg, ui};
 use color_eyre::eyre::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use itertools::Itertools;
@@ -11,7 +11,7 @@ use ratatui::layout::Layout;
 use ratatui::style::{Color, Style};
 use ratatui::symbols;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Tabs;
+use ratatui::widgets::{TableState, Tabs};
 use ratatui::{
     DefaultTerminal, Frame,
     buffer::Buffer,
@@ -23,6 +23,8 @@ use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 use tokio::sync::mpsc::Sender;
 use tokio_stream::StreamExt;
+
+const LOOKUP: usize = 3;
 
 #[derive(Debug, Display, EnumIter, Clone, Copy, PartialEq)]
 enum View {
@@ -46,11 +48,12 @@ pub struct App {
     // Search results data:
     input_mode: InputMode,
     search_query: String,
-    _last_search_query: String, // Used for lazy searching data.
+    table_state: TableState,
+    last_search_query: String, // Used for lazy searching data.
     character_index: usize,
     search_results: SearchResults,
     active_search_type: SearchType,
-    _fetch_in_flight: bool,
+    fetch_in_flight: bool,
 }
 
 impl App {
@@ -62,11 +65,12 @@ impl App {
             // Search results data:
             input_mode: InputMode::Normal,
             search_query: String::new(),
-            _last_search_query: String::new(),
+            table_state: TableState::new(),
+            last_search_query: String::new(),
             character_index: 0,
             search_results: SearchResults::default(),
             active_search_type: SearchType::Track,
-            _fetch_in_flight: false,
+            fetch_in_flight: false,
         }
     }
 
@@ -85,8 +89,13 @@ impl App {
                     match event {
                         SpotifyEvent::CurrentlyPlaying(_) => {},
                         SpotifyEvent::NewSearchResults(data) => {
+                            self.fetch_in_flight = false;
                             self.search_results = data;
                         },
+                        SpotifyEvent::AppendSearchResults(data) => {
+                            self.fetch_in_flight = false;
+                            self.search_results.append_page(data);
+                        }
                     }
                 }
             }
@@ -102,6 +111,7 @@ impl App {
         let search_query = self.search_query();
         let search_type = self.active_search_type;
         let spotify_client = Arc::clone(&self.spotify_client);
+        self.fetch_in_flight = true;
         tokio::spawn(async move {
             let (r1, r2, r3, r4, r5) = tokio::join!(
                 spotify_client.search(search_type, 0, search_query.as_str()),
@@ -114,7 +124,37 @@ impl App {
             tx.send(SpotifyEvent::NewSearchResults(combined)).await.ok();
         });
         self.character_index = 0;
+        self.last_search_query = self.search_query.clone();
         self.search_query = String::new();
+    }
+
+    fn fetch_next_page(&mut self, tx: &Sender<SpotifyEvent>) {
+        if self.fetch_in_flight {
+            return;
+        }
+        self.fetch_in_flight = true;
+        let offset = self
+            .search_results
+            .active(self.active_search_type)
+            .map(|r| r.next_offset())
+            .unwrap_or(0);
+        let (query, client, tx) = (
+            self.last_search_query.clone(),
+            Arc::clone(&self.spotify_client),
+            tx.clone(),
+        );
+        let search_type = self.active_search_type;
+
+        tokio::spawn(async move {
+            match client.search(search_type, offset, query.as_str()).await {
+                Ok(page) => {
+                    tx.send(SpotifyEvent::AppendSearchResults(page)).await.ok();
+                }
+                Err(e) => {
+                    trace_dbg!(level: tracing::Level::ERROR, e.to_string());
+                }
+            }
+        });
     }
 
     fn move_cursor_left(&mut self) {
@@ -158,7 +198,7 @@ impl App {
         new_cursor_pos.clamp(0, self.search_query.chars().count())
     }
 
-    fn draw(&self, frame: &mut Frame) {
+    fn draw(&mut self, frame: &mut Frame) {
         let layout = Layout::vertical([
             Constraint::Length(3),
             Constraint::Min(0),
@@ -187,6 +227,10 @@ impl App {
             }
         }
         App::render_bottom_bar(layout[2], frame.buffer_mut());
+    }
+
+    pub fn table_state_mut(&mut self) -> &mut TableState {
+        &mut self.table_state
     }
 
     pub fn active_search_type(&self) -> SearchType {
@@ -279,8 +323,31 @@ impl App {
                         self.change_input(InputMode::Editing)
                     }
                     //TODO: Implement this!
-                    KeyCode::Char('i') => todo!("Implement this for moving up the search list"),
-                    KeyCode::Char('j') => todo!("Implement this for moving down the search list"),
+                    KeyCode::Char('j') if self.current_view == View::Search => {
+                        // TODO: Need to add logic for actually getting the lazy load!
+                        let loaded = self
+                            .search_results
+                            .active(self.active_search_type())
+                            .map(|r| r.len())
+                            .unwrap_or(0);
+                        if loaded > 0 {
+                            let next = self.table_state.selected().map(|i| i + 1).unwrap_or(0);
+                            if loaded.saturating_sub(next) <= LOOKUP
+                                && self
+                                    .search_results
+                                    .active(self.active_search_type)
+                                    .map(|r| r.has_more())
+                                    .unwrap_or(false)
+                            {
+                                self.fetch_next_page(tx);
+                            }
+                            self.table_state.select(Some(next.min(loaded - 1)));
+                        }
+                    }
+                    KeyCode::Char('k') if self.current_view == View::Search => {
+                        let prev = self.table_state.selected().unwrap_or(0).saturating_sub(1);
+                        self.table_state.select(Some(prev));
+                    }
                     KeyCode::Char('1') => self.change_view(View::Home),
                     KeyCode::Char('2') => self.change_view(View::Search),
                     KeyCode::Char('3') => self.change_view(View::Playlists),

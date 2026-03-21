@@ -3,14 +3,13 @@ use ratatui::{
     layout::{Constraint, Layout, Position, Rect},
     prelude::Widget,
     style::{Color, Style},
-    widgets::{Block, List, Paragraph},
+    widgets::{Block, Paragraph, Row, Table},
 };
-use rspotify::model::SearchType;
 
 use crate::app::app::{App, InputMode};
 
-pub fn render(area: Rect, frame: &mut Frame, app: &App) {
-    let [help_area, search_bar, results] = Layout::vertical([
+pub fn render(area: Rect, frame: &mut Frame, app: &mut App) {
+    let [_help_area, search_bar, results_area] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(3),
         Constraint::Min(1),
@@ -41,22 +40,29 @@ pub fn render(area: Rect, frame: &mut Frame, app: &App) {
     }
 
     // Now draw the results page.
-    match app.active_search_type() {
-        SearchType::Track => {
-            if let Some(data) = app.search_results().tracks {
-                let names: Vec<String> = data.items.iter().map(|t| t.name.clone()).collect();
-                let list = List::new(names).block(Block::bordered().title("Results"));
-                frame.render_widget(list, results);
-            } else {
-                Paragraph::new("")
-                    .centered()
-                    .block(Block::bordered().title("Results"))
-                    .render(results, frame.buffer_mut());
-            }
-        }
-        SearchType::Album => {
-            println!("TBD")
-        }
-        _ => {}
+    if let Some(results) = app.search_results().active(app.active_search_type()) {
+        let rows: Vec<Row> = (0..results.len()).map(|i| results.row_at(i)).collect();
+        let title = format!(
+            "Results ({}/{})",
+            app.table_state_mut().selected().unwrap_or(0),
+            results.len(),
+        );
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+                Constraint::Fill(1),
+            ],
+        )
+        .header(results.headers())
+        .block(Block::bordered().title(title))
+        .row_highlight_style(Style::default().bg(Color::DarkGray));
+        frame.render_stateful_widget(table, results_area, app.table_state_mut());
+    } else {
+        Paragraph::new("")
+            .centered()
+            .block(Block::bordered().title("Results"))
+            .render(results_area, frame.buffer_mut());
     }
 }
