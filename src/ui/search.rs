@@ -3,22 +3,36 @@ use ratatui::{
     layout::{Constraint, Layout, Position, Rect},
     prelude::Widget,
     style::{Color, Style},
-    widgets::{Block, Paragraph, Row, Table},
+    symbols,
+    widgets::{Block, Paragraph, Row, Table, Tabs},
+};
+use strum::IntoEnumIterator;
+
+use crate::app::{
+    app::{App, InputMode},
+    search_tab::SearchTab,
 };
 
-use crate::app::app::{App, InputMode};
-
 pub fn render(area: Rect, frame: &mut Frame, app: &mut App) {
-    let [_help_area, search_bar, results_area] = Layout::vertical([
+    let [tabs_area, search_bar, results_area] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(3),
         Constraint::Min(1),
     ])
     .areas(area);
 
-    //TODO: Render the help page to show tips for navigating.
-    //
-    //
+    //TODO: Add proper representation of navigation messages!
+
+    let titles = SearchTab::iter().map(|t| t.to_string());
+    let selected = SearchTab::iter()
+        .position(|t| t.search_type() == app.active_search_type())
+        .unwrap_or(0);
+
+    Tabs::new(titles)
+        .select(selected)
+        .style(Style::default().fg(Color::Cyan))
+        .divider(symbols::DOT)
+        .render(tabs_area, frame.buffer_mut());
 
     // Search Bar implementation. It needs to be displayed differently based off the state you are
     // in

@@ -164,8 +164,8 @@ impl<'a> ActiveResults<'a> {
             Self::Tracks(_) => Row::new(vec!["Track", "Artist", "Album"]),
             Self::Albums(_) => Row::new(vec!["Album", "Artist"]),
             Self::Artist(_) => Row::new(vec!["Artist", "Genres"]),
-            Self::Shows(_) => Row::new(vec!["Show", "Publisher"]),
-            Self::Playlists(_) => Row::new(vec!["Playlist", "Genres"]),
+            Self::Shows(_) => Row::new(vec!["Show"]),
+            Self::Playlists(_) => Row::new(vec!["Playlist"]),
         }
     }
 
@@ -181,7 +181,24 @@ impl<'a> ActiveResults<'a> {
                 ])
             }
             // TODO: Need to implement this!
-            _ => Row::new(vec![""]),
+            Self::Albums(r) => {
+                let a = &r.items[idx];
+                let artist = a.artists.first().map(|art| art.name.as_str()).unwrap_or("");
+                Row::new(vec![a.name.clone(), artist.to_string()])
+            }
+            Self::Artist(r) => {
+                let a = &r.items[idx];
+                let name = a.name.to_string();
+                Row::new(vec![name, a.genres.join(", ")])
+            }
+            Self::Shows(r) => {
+                let s = &r.items[idx];
+                Row::new(vec![s.name.clone()])
+            }
+            Self::Playlists(r) => {
+                let p = &r.items[idx];
+                Row::new(vec![p.name.clone()])
+            }
         }
     }
 }

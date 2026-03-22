@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::app::search_results::SearchResults;
+use crate::app::search_tab::SearchTab;
 use crate::spotify::client::SpotifyApi;
 use crate::spotify::spotify_event::SpotifyEvent;
 use crate::{trace_dbg, ui};
@@ -52,7 +53,7 @@ pub struct App {
     last_search_query: String, // Used for lazy searching data.
     character_index: usize,
     search_results: SearchResults,
-    active_search_type: SearchType,
+    active_search_tab: SearchTab,
     fetch_in_flight: bool,
 }
 
@@ -69,7 +70,7 @@ impl App {
             last_search_query: String::new(),
             character_index: 0,
             search_results: SearchResults::default(),
-            active_search_type: SearchType::Track,
+            active_search_tab: SearchTab::Tracks,
             fetch_in_flight: false,
         }
     }
@@ -109,7 +110,7 @@ impl App {
         // save the data to the search results value
         let tx = tx.clone();
         let search_query = self.search_query();
-        let search_type = self.active_search_type;
+        let search_type = self.active_search_tab.search_type();
         let spotify_client = Arc::clone(&self.spotify_client);
         self.fetch_in_flight = true;
         tokio::spawn(async move {
@@ -128,6 +129,31 @@ impl App {
         self.search_query = String::new();
     }
 
+    fn refetch_for_type(&mut self, tx: &Sender<SpotifyEvent>) {
+        if self.last_search_query.is_empty() || self.fetch_in_flight {
+            return;
+        }
+
+        self.fetch_in_flight = true;
+        let (search_query, spotify_client, tx) = (
+            self.last_search_query.clone(),
+            Arc::clone(&self.spotify_client),
+            tx.clone(),
+        );
+        let search_type = self.active_search_tab.search_type();
+        tokio::spawn(async move {
+            let (r1, r2, r3, r4, r5) = tokio::join!(
+                spotify_client.search(search_type, 0, search_query.as_str()),
+                spotify_client.search(search_type, 10, search_query.as_str()),
+                spotify_client.search(search_type, 20, search_query.as_str()),
+                spotify_client.search(search_type, 30, search_query.as_str()),
+                spotify_client.search(search_type, 40, search_query.as_str()),
+            );
+            let combined = SearchResults::from_pages([r1, r2, r3, r4, r5]);
+            tx.send(SpotifyEvent::NewSearchResults(combined)).await.ok();
+        });
+    }
+
     fn fetch_next_page(&mut self, tx: &Sender<SpotifyEvent>) {
         if self.fetch_in_flight {
             return;
@@ -135,7 +161,7 @@ impl App {
         self.fetch_in_flight = true;
         let offset = self
             .search_results
-            .active(self.active_search_type)
+            .active(self.active_search_tab.search_type())
             .map(|r| r.next_offset())
             .unwrap_or(0);
         let (query, client, tx) = (
@@ -143,7 +169,7 @@ impl App {
             Arc::clone(&self.spotify_client),
             tx.clone(),
         );
-        let search_type = self.active_search_type;
+        let search_type = self.active_search_tab.search_type();
 
         tokio::spawn(async move {
             match client.search(search_type, offset, query.as_str()).await {
@@ -234,7 +260,7 @@ impl App {
     }
 
     pub fn active_search_type(&self) -> SearchType {
-        self.active_search_type
+        self.active_search_tab.search_type()
     }
 
     pub fn username(&self) -> Option<&str> {
@@ -322,7 +348,16 @@ impl App {
                     {
                         self.change_input(InputMode::Editing)
                     }
-                    //TODO: Implement this!
+                    KeyCode::Char('l') if self.current_view == View::Search => {
+                        let tabs: Vec<SearchTab> = SearchTab::iter().collect();
+                        let idx = tabs
+                            .iter()
+                            .position(|t| *t == self.active_search_tab)
+                            .unwrap_or(0);
+                        self.active_search_tab = tabs[(idx + 1) % tabs.len()];
+                        self.table_state.select(Some(0));
+                        self.refetch_for_type(tx);
+                    }
                     KeyCode::Char('j') if self.current_view == View::Search => {
                         // TODO: Need to add logic for actually getting the lazy load!
                         let loaded = self
@@ -335,7 +370,7 @@ impl App {
                             if loaded.saturating_sub(next) <= LOOKUP
                                 && self
                                     .search_results
-                                    .active(self.active_search_type)
+                                    .active(self.active_search_tab.search_type())
                                     .map(|r| r.has_more())
                                     .unwrap_or(false)
                             {
@@ -347,6 +382,16 @@ impl App {
                     KeyCode::Char('k') if self.current_view == View::Search => {
                         let prev = self.table_state.selected().unwrap_or(0).saturating_sub(1);
                         self.table_state.select(Some(prev));
+                    }
+                    KeyCode::Char('h') if self.current_view == View::Search => {
+                        let tabs: Vec<SearchTab> = SearchTab::iter().collect();
+                        let idx = tabs
+                            .iter()
+                            .position(|t| *t == self.active_search_tab)
+                            .unwrap_or(0);
+                        self.active_search_tab = tabs[(idx + tabs.len() - 1) % tabs.len()];
+                        self.table_state.select(Some(0));
+                        self.refetch_for_type(tx);
                     }
                     KeyCode::Char('1') => self.change_view(View::Home),
                     KeyCode::Char('2') => self.change_view(View::Search),
